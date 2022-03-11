@@ -2,6 +2,9 @@ import 'zone.js'; // for angular subapp
 import { registerMicroApps, runAfterFirstMounted, setDefaultMountApp, start, initGlobalState } from '../../es';
 import './index.less';
 
+import * as Sentry from '@sentry/vue';
+import { BrowserTracing } from '@sentry/tracing';
+
 /**
  * 主应用 **可以使用任意技术栈**
  * 以下分别是 React 和 Vue 的示例，可切换尝试
@@ -15,6 +18,8 @@ import render from './render/ReactRender';
 render({ loading: true });
 
 const loader = loading => render({ loading });
+
+let mountedApp = {}
 
 /**
  * Step2 注册子应用
@@ -63,6 +68,7 @@ registerMicroApps(
       container: '#subapp-viewport',
       loader,
       activeRule: '/vue3',
+      dsn: 'http://xxx@127.0.0.1:9000/6',
     },
   ],
   {
@@ -74,6 +80,7 @@ registerMicroApps(
     beforeMount: [
       app => {
         console.log('[LifeCycle] before mount %c%s', 'color: green;', app.name);
+        mountedApp = app;
       },
     ],
     afterUnmount: [
@@ -84,9 +91,13 @@ registerMicroApps(
   },
 );
 
-const { onGlobalStateChange, setGlobalState } = initGlobalState({
+const globalState = {
   user: 'qiankun',
-});
+  instance: null,
+  router: null,
+}
+
+const { onGlobalStateChange, setGlobalState } = initGlobalState(globalState);
 
 onGlobalStateChange((value, prev) => console.log('[onGlobalStateChange - master]:', value, prev));
 
@@ -110,3 +121,28 @@ start();
 runAfterFirstMounted(() => {
   console.log('[MainApp] first app mounted');
 });
+
+onGlobalStateChange((state) => {
+  if (state.instance && state.router && mountedApp.dsn) {
+    initSentry(state.instance, state.router);
+  }
+});
+
+function initSentry(instance, router) {
+  Sentry.init({
+    app: instance, // 以 vue3 子应用为例
+    dsn: mountedApp.dsn,
+    integrations: [
+      new BrowserTracing({
+        routingInstrumentation: Sentry.vueRouterInstrumentation(router),
+        tracingOrigins: ["localhost", "my-site-url.com", /^\//],
+      }),
+    ],
+    beforeSend(event) {
+      return mountedApp.dsn ? event : null;
+    },
+    tracesSampler() {
+      return mountedApp.dsn ? 1 : 0;
+    },
+  });
+}

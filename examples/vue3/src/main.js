@@ -52,6 +52,11 @@ export async function mount(props) {
   render(props);
   instance.config.globalProperties.$onGlobalStateChange = props.onGlobalStateChange;
   instance.config.globalProperties.$setGlobalState = props.setGlobalState;
+  props.setGlobalState({ instance, router })
+
+  setTimeout(() => {
+    throw new Error('vue3 mount error test')
+  }, 3000)
 }
 
 export async function unmount() {
@@ -60,4 +65,8 @@ export async function unmount() {
   instance = null;
   router = null;
   history.destroy();
+
+  setTimeout(() => {
+    throw new Error('vue3 unmount error test')
+  }, 3000)
 }
